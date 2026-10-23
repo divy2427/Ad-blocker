@@ -29,7 +29,21 @@
   }
 
   function visibleAdText() {
-    const nodes = [...document.querySelectorAll("body *")];
+  const nodes = [
+    ...document.querySelectorAll(
+      '[data-testid="context-item-info-ad-subtitle"]'
+    )
+  ];
+
+  return nodes.some((node) => {
+    const text = node.textContent?.trim() || "";
+    const rect = node.getBoundingClientRect();
+    const visible = rect.width > 0 && rect.height > 0;
+
+    return visible &&
+      /^advertisement\b/i.test(text);
+  });
+}
 
     return nodes.some((node) => {
       if (node.children.length !== 0) return false;
