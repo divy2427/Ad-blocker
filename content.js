@@ -29,38 +29,25 @@
   }
 
   function visibleAdText() {
-  const nodes = [
-    ...document.querySelectorAll(
+    const nodes = document.querySelectorAll(
       '[data-testid="context-item-info-ad-subtitle"]'
-    )
-  ];
+    );
 
-  return nodes.some((node) => {
-    const text = node.textContent?.trim() || "";
-    const rect = node.getBoundingClientRect();
-    const visible = rect.width > 0 && rect.height > 0;
-
-    return visible &&
-      /^advertisement\b/i.test(text);
-  });
-}
-
-    return nodes.some((node) => {
-      if (node.children.length !== 0) return false;
-
+    return [...nodes].some((node) => {
       const text = node.textContent?.trim() || "";
       const rect = node.getBoundingClientRect();
       const visible = rect.width > 0 && rect.height > 0;
 
-      return visible &&
-        /\badvertisement\b|\bsponsored\b/i.test(text);
+      return visible && /^advertisement\b/i.test(text);
     });
   }
 
   function getStatus() {
     const title = readText(SELECTORS.title);
     const artist = readText(SELECTORS.artist);
-    const button = document.querySelector(SELECTORS.playPause);
+    const button = document.querySelector(
+      SELECTORS.playPause[0]
+    );
     const label = button?.getAttribute("aria-label") || "";
 
     const playback = /pause/i.test(label)
@@ -79,7 +66,7 @@
         ? "Possible advertisement (text match)"
         : "Unconfirmed",
       note: adDetected
-        ? "Visible advertisement-related text found. This is a heuristic."
+        ? "Spotify's advertisement label is visible. Detection is heuristic."
         : title
           ? "Track metadata visible. Ad status is unconfirmed."
           : "Track metadata unavailable. Spotify may use a different page layout.",
@@ -95,7 +82,7 @@
     panel.id = PANEL_ID;
     panel.setAttribute("role", "status");
 
-    for (const [className, text] of [
+    const fields = [
       ["sah-heading", "Spotify Ad Helper"],
       ["sah-status", "Checking player…"],
       ["sah-meta", ""],
@@ -103,16 +90,20 @@
       ["sah-ad-status", ""],
       ["sah-note", ""],
       ["sah-updated", ""]
-    ]) {
-      const item = document.createElement("div");
-      item.className = className;
-      item.textContent = text;
-      panel.appendChild(item);
+    ];
+
+    for (const [className, value] of fields) {
+      const element = document.createElement("div");
+      element.className = className;
+      element.textContent = value;
+      panel.appendChild(element);
     }
 
     (document.body || document.documentElement).appendChild(panel);
     return panel;
   }
+
+  let scheduled = false;
 
   function renderPanel() {
     scheduled = false;
@@ -147,8 +138,6 @@
       // Storage may be unavailable.
     }
   }
-
-  let scheduled = false;
 
   function scheduleUpdate() {
     if (scheduled) return;
