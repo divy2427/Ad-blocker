@@ -4,7 +4,7 @@
 
   const PANEL_ID = "spotify-ad-helper-panel";
   const CHECK_INTERVAL = 1000;
-  const SKIP_COOLDOWN = 5000;
+  const VERIFY_AFTER_MS = 4000;
 
   const SELECTORS = {
     title: [
@@ -15,16 +15,15 @@
       '[data-testid="context-item-info-artist"]'
     ],
     ad: '[data-testid="context-item-info-ad-subtitle"]',
-    next: [
-      'button[data-testid="control-button-skip-forward"]',
-      'button[aria-label*="Next"]'
-    ],
+    next: 'button[data-testid="control-button-skip-forward"]',
     playPause: 'button[data-testid="control-button-playpause"]'
   };
 
-  let lastAttempt = 0;
-  let lastAdState = false;
   let timer = null;
+  let previousAd = false;
+  let pendingTest = null;
+  let skipStatus = "Not tested";
+  let note = "Waiting for a visible advertisement.";
 
   function readText(selectors) {
     for (const selector of selectors) {
@@ -44,22 +43,6 @@
         rect.height > 0 &&
         /^advertisement\b/i.test(text);
     });
-  }
-
-  function getNextButton() {
-    for (const selector of SELECTORS.next) {
-      const button = document.querySelector(selector);
-      if (button) return button;
-    }
-    return null;
-  }
-
-  function isButtonEnabled(button) {
-    if (!button) return false;
-
-    return !button.disabled &&
-      button.getAttribute("aria-disabled") !== "true" &&
-      !button.classList.contains("disabled");
   }
 
   function ensurePanel() {
@@ -120,10 +103,9 @@
     if (!document.body) return;
 
     const adDetected = getVisibleAd();
-    const nextButton = getNextButton();
-    const enabled = isButtonEnabled(nextButton);
     const title = readText(SELECTORS.title);
     const artist = readText(SELECTORS.artist);
+    const nextButton = document.querySelector(SELECTORS.next);
     const playPause = document.querySelector(SELECTORS.playPause);
     const label = playPause?.getAttribute("aria-label") || "";
 
@@ -133,39 +115,45 @@
         ? "Paused"
         : "Unknown";
 
-    let skipStatus = "Not attempted";
-    let note = "Waiting for player state.";
+    // Verify the result of a single manual test without clicking again.
+    if (pendingTest && Date.now() >= pendingTest.verifyAt) {
+      const currentSignature = `${title}|${artist}`;
+      const adEnded = !adDetected;
+      const trackChanged =
+        currentSignature !== pendingTest.signature &&
+        currentSignature !== "|";
 
-    if (adDetected) {
-      if (!lastAdState) {
-        lastAttempt = 0;
-      }
-
-      if (!nextButton) {
-        skipStatus = "Next button not found";
-        note = "Spotify's Next control could not be located.";
-      } else if (!enabled) {
-        skipStatus = "Unavailable: button disabled";
-        note = "Spotify has disabled the Next control. No click was attempted.";
-      } else if (Date.now() - lastAttempt >= SKIP_COOLDOWN) {
-        lastAttempt = Date.now();
-
-        // Test only the normal, enabled player control.
-        nextButton.click();
-
-        skipStatus = "Click attempted";
-        note = "A click was attempted on the enabled Next control. Verify whether playback changed.";
+      if (adEnded || trackChanged) {
+        skipStatus = "Player state changed";
+        note = "The ad label or track details changed. This does not prove the ad was skipped.";
       } else {
-        skipStatus = "Cooldown";
-        note = "Waiting before another skip attempt.";
+        skipStatus = "Skip unconfirmed";
+        note = "No visible ad or track change was detected after the test.";
       }
-    } else {
-      skipStatus = "No ad detected";
-      note = "No visible Spotify advertisement label was found.";
-      lastAttempt = 0;
+
+      pendingTest = null;
     }
 
-    lastAdState = adDetected;
+    if (adDetected && !previousAd) {
+      skipStatus = nextButton?.disabled
+        ? "Next unavailable"
+        : "Ready for manual test";
+      note = nextButton?.disabled
+        ? "Spotify has disabled Next. No automatic click was attempted."
+        : "Ad detected. No automatic click was attempted.";
+    }
+
+    if (!adDetected) {
+      if (previousAd) {
+        skipStatus = "Ad label disappeared";
+        note = "The advertisement label is no longer visible.";
+      } else if (!pendingTest) {
+        skipStatus = "No ad detected";
+        note = "No visible advertisement label was found.";
+      }
+    }
+
+    previousAd = adDetected;
 
     updatePanel({
       title,
@@ -173,16 +161,31 @@
       playback,
       adStatus: adDetected
         ? "Possible advertisement (text match)"
-        : "Unconfirmed",
+        : "No visible ad label",
       skipStatus,
       note,
       observedAt: new Date().toLocaleTimeString()
     });
   }
 
+  // Expose a diagnostic function for the DevTools Console.
+  // It does not click or modify Spotify controls.
+  window.spotifyAdHelperStatus = function () {
+    const button = document.querySelector(SELECTORS.next);
+
+    return {
+      adDetected: getVisibleAd(),
+      nextButtonFound: !!button,
+      nextButtonDisabled: button ? button.disabled : null,
+      playbackLabel:
+        document.querySelector(SELECTORS.playPause)
+          ?.getAttribute("aria-label") || null,
+      skipStatus
+    };
+  };
+
   function start() {
     checkPlayer();
-
     if (timer) clearInterval(timer);
     timer = setInterval(checkPlayer, CHECK_INTERVAL);
   }
