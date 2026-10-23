@@ -3,75 +3,63 @@
   window.__spotifyAdHelperLoaded = true;
 
   const PANEL_ID = "spotify-ad-helper-panel";
+  const CHECK_INTERVAL = 1000;
+  const SKIP_COOLDOWN = 5000;
 
   const SELECTORS = {
     title: [
       '[data-testid="context-item-info-title"]',
-      '[data-testid="now-playing-widget"] a[href*="/track/"]',
-      'footer [data-testid="context-item-link"]'
+      '[data-testid="context-item-link"]'
     ],
     artist: [
-      '[data-testid="context-item-info-artist"]',
-      'footer [data-testid="context-item-info-artist"]'
+      '[data-testid="context-item-info-artist"]'
     ],
-    playPause: [
-      'button[data-testid="control-button-playpause"]'
-    ]
+    ad: '[data-testid="context-item-info-ad-subtitle"]',
+    next: [
+      'button[data-testid="control-button-skip-forward"]',
+      'button[aria-label*="Next"]'
+    ],
+    playPause: 'button[data-testid="control-button-playpause"]'
   };
+
+  let lastAttempt = 0;
+  let lastAdState = false;
+  let timer = null;
 
   function readText(selectors) {
     for (const selector of selectors) {
       const node = document.querySelector(selector);
-      const text = node?.textContent?.trim();
-      if (text) return text;
+      const value = node?.textContent?.trim();
+      if (value) return value;
     }
     return "";
   }
 
-  function visibleAdText() {
-    const nodes = document.querySelectorAll(
-      '[data-testid="context-item-info-ad-subtitle"]'
-    );
-
-    return [...nodes].some((node) => {
+  function getVisibleAd() {
+    return [...document.querySelectorAll(SELECTORS.ad)].some(node => {
       const text = node.textContent?.trim() || "";
       const rect = node.getBoundingClientRect();
-      const visible = rect.width > 0 && rect.height > 0;
 
-      return visible && /^advertisement\b/i.test(text);
+      return rect.width > 0 &&
+        rect.height > 0 &&
+        /^advertisement\b/i.test(text);
     });
   }
 
-  function getStatus() {
-    const title = readText(SELECTORS.title);
-    const artist = readText(SELECTORS.artist);
-    const button = document.querySelector(
-      SELECTORS.playPause[0]
-    );
-    const label = button?.getAttribute("aria-label") || "";
+  function getNextButton() {
+    for (const selector of SELECTORS.next) {
+      const button = document.querySelector(selector);
+      if (button) return button;
+    }
+    return null;
+  }
 
-    const playback = /pause/i.test(label)
-      ? "Playing"
-      : /play/i.test(label)
-        ? "Paused"
-        : "Unknown";
+  function isButtonEnabled(button) {
+    if (!button) return false;
 
-    const adDetected = visibleAdText();
-
-    return {
-      title,
-      artist,
-      playback,
-      adStatus: adDetected
-        ? "Possible advertisement (text match)"
-        : "Unconfirmed",
-      note: adDetected
-        ? "Spotify's advertisement label is visible. Detection is heuristic."
-        : title
-          ? "Track metadata visible. Ad status is unconfirmed."
-          : "Track metadata unavailable. Spotify may use a different page layout.",
-      observedAt: new Date().toLocaleTimeString()
-    };
+    return !button.disabled &&
+      button.getAttribute("aria-disabled") !== "true" &&
+      !button.classList.contains("disabled");
   }
 
   function ensurePanel() {
@@ -88,6 +76,7 @@
       ["sah-meta", ""],
       ["sah-playback", ""],
       ["sah-ad-status", ""],
+      ["sah-skip-status", ""],
       ["sah-note", ""],
       ["sah-updated", ""]
     ];
@@ -103,13 +92,7 @@
     return panel;
   }
 
-  let scheduled = false;
-
-  function renderPanel() {
-    scheduled = false;
-    if (!document.body) return;
-
-    const data = getStatus();
+  function updatePanel(data) {
     const panel = ensurePanel();
 
     panel.querySelector(".sah-status").textContent =
@@ -125,34 +108,84 @@
     panel.querySelector(".sah-ad-status").textContent =
       `Ad status: ${data.adStatus}`;
 
+    panel.querySelector(".sah-skip-status").textContent =
+      `Skip test: ${data.skipStatus}`;
+
     panel.querySelector(".sah-note").textContent = data.note;
     panel.querySelector(".sah-updated").textContent =
       `Last checked: ${data.observedAt}`;
+  }
 
-    try {
-      sessionStorage.setItem(
-        "spotifyAdHelperStatus",
-        JSON.stringify(data)
-      );
-    } catch (_) {
-      // Storage may be unavailable.
+  function checkPlayer() {
+    if (!document.body) return;
+
+    const adDetected = getVisibleAd();
+    const nextButton = getNextButton();
+    const enabled = isButtonEnabled(nextButton);
+    const title = readText(SELECTORS.title);
+    const artist = readText(SELECTORS.artist);
+    const playPause = document.querySelector(SELECTORS.playPause);
+    const label = playPause?.getAttribute("aria-label") || "";
+
+    const playback = /pause/i.test(label)
+      ? "Playing"
+      : /play/i.test(label)
+        ? "Paused"
+        : "Unknown";
+
+    let skipStatus = "Not attempted";
+    let note = "Waiting for player state.";
+
+    if (adDetected) {
+      if (!lastAdState) {
+        lastAttempt = 0;
+      }
+
+      if (!nextButton) {
+        skipStatus = "Next button not found";
+        note = "Spotify's Next control could not be located.";
+      } else if (!enabled) {
+        skipStatus = "Unavailable: button disabled";
+        note = "Spotify has disabled the Next control. No click was attempted.";
+      } else if (Date.now() - lastAttempt >= SKIP_COOLDOWN) {
+        lastAttempt = Date.now();
+
+        // Test only the normal, enabled player control.
+        nextButton.click();
+
+        skipStatus = "Click attempted";
+        note = "A click was attempted on the enabled Next control. Verify whether playback changed.";
+      } else {
+        skipStatus = "Cooldown";
+        note = "Waiting before another skip attempt.";
+      }
+    } else {
+      skipStatus = "No ad detected";
+      note = "No visible Spotify advertisement label was found.";
+      lastAttempt = 0;
     }
+
+    lastAdState = adDetected;
+
+    updatePanel({
+      title,
+      artist,
+      playback,
+      adStatus: adDetected
+        ? "Possible advertisement (text match)"
+        : "Unconfirmed",
+      skipStatus,
+      note,
+      observedAt: new Date().toLocaleTimeString()
+    });
   }
 
-  function scheduleUpdate() {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(renderPanel, 500);
+  function start() {
+    checkPlayer();
+
+    if (timer) clearInterval(timer);
+    timer = setInterval(checkPlayer, CHECK_INTERVAL);
   }
 
-  const observer = new MutationObserver(scheduleUpdate);
-
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["aria-label"]
-  });
-
-  renderPanel();
+  start();
 })();
