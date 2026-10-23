@@ -1,0 +1,33 @@
+#spotify-ad-helper-panel {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2147483647;
+  width: min(320px, calc(100vw - 28px));
+  box-sizing: border-box;
+  padding: 12px 14px;
+  border: 1px solid rgba(255,255,255,.18);
+  border-radius: 12px;
+  background: #202020;
+  color: #fff;
+  box-shadow: 0 8px 30px rgba(0,0,0,.35);
+  font: 13px/1.4 system-ui, -apple-system, sans-serif;
+}
+#spotify-ad-helper-panel .sah-heading {
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 5px;
+}
+#spotify-ad-helper-panel .sah-status {
+  color: #9be7b0;
+  font-weight: 600;
+}
+#spotify-ad-helper-panel .sah-meta {
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+#spotify-ad-helper-panel .sah-note {
+  margin-top: 6px;
+  color: #c7c7c7;
+  font-size: 11px;
+}
