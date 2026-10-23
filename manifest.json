@@ -1,28 +1,26 @@
+
 {
   "manifest_version": 3,
-  "name": "Spotify Ad Helper",
-  "version": "0.1.0",
-  "description": "A diagnostic extension that displays visible Spotify Web Player metadata and playback UI changes.",
-  "permissions": [],
-  "host_permissions": [
-    "https://open.spotify.com/*"
-  ],
-  "content_scripts": [
-    {
-      "matches": [
-        "https://open.spotify.com/*"
-      ],
-      "js": [
-        "content.js"
-      ],
-      "css": [
-        "styles.css"
-      ],
-      "run_at": "document_idle"
-    }
-  ],
-  "action": {
-    "default_title": "Spotify Ad Helper",
-    "default_popup": "popup.html"
-  }
-}
+    "name": "Spotify Ad Helper",
+      "version": "0.2.0",
+        "description": "Monitor Spotify Web Player metadata and playback controls with an on-page diagnostic panel.",
+          "content_scripts": [
+              {
+                    "matches": [
+                            "https://open.spotify.com/*"
+                                  ],
+                                        "js": [
+                                                "content.js"
+                                                      ],
+                                                            "css": [
+                                                                    "styles.css"
+                                                                          ],
+                                                                                "run_at": "document_idle"
+                                                                                    }
+                                                                                      ],
+                                                                                        "action": {
+                                                                                            "default_title": "Spotify Ad Helper",
+                                                                                                "default_popup": "popup.html"
+                                                                                                  }
+                                                                                                  }
+                                                                                                  

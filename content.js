@@ -1,80 +1,155 @@
+
 (() => {
   if (window.__spotifyAdHelperLoaded) return;
-  window.__spotifyAdHelperLoaded = true;
+    window.__spotifyAdHelperLoaded = true;
 
-  const SELECTORS = {
-    title: '[data-testid="context-item-info-title"]',
-    artist: '[data-testid="context-item-info-artist"]',
-    playPause: 'button[data-testid="control-button-playpause"]'
-  };
+      const PANEL_ID = "spotify-ad-helper-panel";
 
-  function readText(selector) {
-    const node = document.querySelector(selector);
-    return node?.textContent?.trim() || "";
-  }
+        const SELECTORS = {
+            title: '[data-testid="context-item-info-title"]',
+                artist: '[data-testid="context-item-info-artist"]',
+                    playPause: 'button[data-testid="control-button-playpause"]'
+                      };
 
-  function getStatus() {
-    const title = readText(SELECTORS.title);
-    const artist = readText(SELECTORS.artist);
-    const playPause = document.querySelector(SELECTORS.playPause);
-    const aria = playPause?.getAttribute("aria-label") || "";
+                        let scheduled = false;
+                          let lastStatus = "";
 
-    return {
-      title,
-      artist,
-      controlLabel: aria,
-      observedAt: new Date().toISOString(),
-      note: title
-        ? "Track metadata visible. This does not prove whether an ad is playing."
-        : "No track title detected. This may be loading, an unsupported layout, or an ad."
-    };
-  }
+                            function readText(selector) {
+                                const node = document.querySelector(selector);
+                                    return node?.textContent?.trim() || "";
+                                      }
 
-  function renderPanel() {
-    let panel = document.getElementById("spotify-ad-helper-panel");
-    if (!panel) {
-      panel = document.createElement("section");
-      panel.id = "spotify-ad-helper-panel";
-      panel.setAttribute("role", "status");
-      panel.innerHTML = `
-        <div class="sah-heading">Spotify Ad Helper</div>
-        <div class="sah-status">Checking player…</div>
-        <div class="sah-meta"></div>
-        <div class="sah-note"></div>
-      `;
-      document.body.appendChild(panel);
-    }
+                                        function getStatus() {
+                                            const title = readText(SELECTORS.title);
+                                                const artist = readText(SELECTORS.artist);
+                                                    const button = document.querySelector(SELECTORS.playPause);
+                                                        const label = button?.getAttribute("aria-label") || "";
 
-    const data = getStatus();
-    panel.querySelector(".sah-status").textContent =
-      data.title ? "Player metadata detected" : "Waiting for player metadata";
-    panel.querySelector(".sah-meta").textContent =
-      [data.title, data.artist].filter(Boolean).join(" — ") || "Track details unavailable";
-    panel.querySelector(".sah-note").textContent = data.note;
+                                                            let playback = "Unknown";
+                                                                if (/pause/i.test(label)) playback = "Playing";
+                                                                    else if (/play/i.test(label)) playback = "Paused";
 
-    try {
-      sessionStorage.setItem("spotifyAdHelperStatus", JSON.stringify(data));
-    } catch (_) {
-      // Storage may be unavailable in some browser contexts; the panel still works.
-    }
-  }
+                                                                        return {
+                                                                              title,
+                                                                                    artist,
+                                                                                          playback,
+                                                                                                adStatus: "Unconfirmed",
+                                                                                                      observedAt: new Date().toLocaleTimeString(),
+                                                                                                            note: title
+                                                                                                                    ? "Track information is visible. Ad status is not confirmed."
+                                                                                                                            : "Track information unavailable. The player may be loading or showing another layout."
+                                                                                                                                };
+                                                                                                                                  }
 
-  let scheduled = false;
-  const observer = new MutationObserver(() => {
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => {
-      scheduled = false;
-      renderPanel();
-    }, 250);
-  });
+                                                                                                                                    function ensurePanel() {
+                                                                                                                                        let panel = document.getElementById(PANEL_ID);
+                                                                                                                                            if (panel) return panel;
 
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ["aria-label"]
-  });
+                                                                                                                                                panel = document.createElement("section");
+                                                                                                                                                    panel.id = PANEL_ID;
+                                                                                                                                                        panel.setAttribute("role", "status");
+                                                                                                                                                            panel.setAttribute("aria-live", "polite");
 
-  renderPanel();
-})();
+                                                                                                                                                                const heading = document.createElement("div");
+                                                                                                                                                                    heading.className = "sah-heading";
+                                                                                                                                                                        heading.textContent = "Spotify Ad Helper";
+
+                                                                                                                                                                            const status = document.createElement("div");
+                                                                                                                                                                                status.className = "sah-status";
+
+                                                                                                                                                                                    const meta = document.createElement("div");
+                                                                                                                                                                                        meta.className = "sah-meta";
+
+                                                                                                                                                                                            const playback = document.createElement("div");
+                                                                                                                                                                                                playback.className = "sah-playback";
+
+                                                                                                                                                                                                    const adStatus = document.createElement("div");
+                                                                                                                                                                                                        adStatus.className = "sah-ad-status";
+
+                                                                                                                                                                                                            const note = document.createElement("div");
+                                                                                                                                                                                                                note.className = "sah-note";
+
+                                                                                                                                                                                                                    const updated = document.createElement("div");
+                                                                                                                                                                                                                        updated.className = "sah-updated";
+
+                                                                                                                                                                                                                            panel.append(
+                                                                                                                                                                                                                                  heading,
+                                                                                                                                                                                                                                        status,
+                                                                                                                                                                                                                                              meta,
+                                                                                                                                                                                                                                                    playback,
+                                                                                                                                                                                                                                                          adStatus,
+                                                                                                                                                                                                                                                                note,
+                                                                                                                                                                                                                                                                      updated
+                                                                                                                                                                                                                                                                          );
+
+                                                                                                                                                                                                                                                                              (document.body || document.documentElement).appendChild(panel);
+                                                                                                                                                                                                                                                                                  return panel;
+                                                                                                                                                                                                                                                                                    }
+
+                                                                                                                                                                                                                                                                                      function renderPanel() {
+                                                                                                                                                                                                                                                                                          scheduled = false;
+
+                                                                                                                                                                                                                                                                                              if (!document.body) {
+                                                                                                                                                                                                                                                                                                    scheduleUpdate();
+                                                                                                                                                                                                                                                                                                          return;
+                                                                                                                                                                                                                                                                                                              }
+
+                                                                                                                                                                                                                                                                                                                  const data = getStatus();
+                                                                                                                                                                                                                                                                                                                      const signature = JSON.stringify(data, [
+                                                                                                                                                                                                                                                                                                                            "title",
+                                                                                                                                                                                                                                                                                                                                  "artist",
+                                                                                                                                                                                                                                                                                                                                        "playback",
+                                                                                                                                                                                                                                                                                                                                              "adStatus",
+                                                                                                                                                                                                                                                                                                                                                    "note"
+                                                                                                                                                                                                                                                                                                                                                        ]);
+
+                                                                                                                                                                                                                                                                                                                                                            const panel = ensurePanel();
+
+                                                                                                                                                                                                                                                                                                                                                                if (signature === lastStatus) return;
+                                                                                                                                                                                                                                                                                                                                                                    lastStatus = signature;
+
+                                                                                                                                                                                                                                                                                                                                                                        panel.querySelector(".sah-status").textContent =
+                                                                                                                                                                                                                                                                                                                                                                              data.title ? "Player metadata detected" : "Waiting for metadata";
+
+                                                                                                                                                                                                                                                                                                                                                                                  panel.querySelector(".sah-meta").textContent =
+                                                                                                                                                                                                                                                                                                                                                                                        [data.title, data.artist].filter(Boolean).join(" — ") ||
+                                                                                                                                                                                                                                                                                                                                                                                              "Track details unavailable";
+
+                                                                                                                                                                                                                                                                                                                                                                                                  panel.querySelector(".sah-playback").textContent =
+                                                                                                                                                                                                                                                                                                                                                                                                        `Playback: ${data.playback}`;
+
+                                                                                                                                                                                                                                                                                                                                                                                                            panel.querySelector(".sah-ad-status").textContent =
+                                                                                                                                                                                                                                                                                                                                                                                                                  `Ad detection: ${data.adStatus}`;
+
+                                                                                                                                                                                                                                                                                                                                                                                                                      panel.querySelector(".sah-note").textContent = data.note;
+                                                                                                                                                                                                                                                                                                                                                                                                                          panel.querySelector(".sah-updated").textContent =
+                                                                                                                                                                                                                                                                                                                                                                                                                                `Last checked: ${data.observedAt}`;
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                    try {
+                                                                                                                                                                                                                                                                                                                                                                                                                                          sessionStorage.setItem(
+                                                                                                                                                                                                                                                                                                                                                                                                                                                  "spotifyAdHelperStatus",
+                                                                                                                                                                                                                                                                                                                                                                                                                                                          JSON.stringify(data)
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                );
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                    } catch (_) {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                          // The panel still works if session storage is unavailable.
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                              }
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                }
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  function scheduleUpdate() {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      if (scheduled) return;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          scheduled = true;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              setTimeout(renderPanel, 300);
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                }
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  const observer = new MutationObserver(scheduleUpdate);
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    observer.observe(document.documentElement, {
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        childList: true,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            subtree: true,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                attributes: true,
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    attributeFilter: ["aria-label"]
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      });
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        renderPanel();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        })();
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
