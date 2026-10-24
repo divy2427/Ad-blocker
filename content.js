@@ -85,7 +85,7 @@
         getComputedStyle(node).visibility !== "hidden";
     });
 
-  const adOverlays = visible(
+  const adIndicators = visible(
     ".ytp-ad-player-overlay, .ytp-ad-text"
   );
 
@@ -93,23 +93,20 @@
     ".ytp-ad-skip-button, .ytp-ad-skip-button-modern"
   );
 
-  const adText = adOverlays
-    .map((node) => node.innerText?.trim())
-    .filter(Boolean);
+  const hasAd = adIndicators.length > 0;
 
-  const hasAd = adOverlays.length > 0;
-
-  const skipAvailable = skipButtons.some((button) =>
+  const skipButton = skipButtons.find((button) =>
     !button.disabled &&
     button.getAttribute("aria-disabled") !== "true"
   );
 
-  if (hasAd && skipAvailable) {
-    return `Ad detected — skip control enabled. ${adText.join(" | ")}`;
+  if (hasAd && skipButton) {
+    skipButton.click();
+    return "Ad detected — clicked enabled Skip button";
   }
 
   if (hasAd) {
-    return `Ad detected — skip unavailable. ${adText.join(" | ")}`;
+    return "Ad detected — waiting for Skip button";
   }
 
   return "No known ad indicator detected";
