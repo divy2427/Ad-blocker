@@ -1,38 +1,42 @@
 (() => {
-  if (window.__spotifyAdHelperLoaded) return;
-  window.__spotifyAdHelperLoaded = true;
+  if (window.__musicAdHelperLoaded) return;
+  window.__musicAdHelperLoaded = true;
 
-  const PANEL_ID = "spotify-ad-helper-panel";
+  const PANEL_ID = "music-ad-helper-panel";
   const CHECK_INTERVAL = 1000;
 
   const SELECTORS = {
     title: [
-      '[data-testid="context-item-info-title"]',
-      '[data-testid="context-item-link"]'
+      ".title.style-scope.ytmusic-player-bar",
+      "ytmusic-player-bar .title"
     ],
     artist: [
-      '[data-testid="context-item-info-artist"]'
+      ".byline.style-scope.ytmusic-player-bar",
+      "ytmusic-player-bar .byline"
     ],
-    ad: '[data-testid="context-item-info-ad-subtitle"]',
-    next: 'button[data-testid="control-button-skip-forward"]',
-    playPause: 'button[data-testid="control-button-playpause"]',
-    volume: 'button[data-testid="volume-bar-toggle"]'
+    video: "video",
+    playPause: [
+      "ytmusic-player-bar #play-pause-button",
+      "ytmusic-player-bar tp-yt-paper-icon-button[title]"
+    ],
+    next: [
+      "ytmusic-player-bar #next-button",
+      "ytmusic-player-bar .next-button"
+    ]
   };
 
   let timer = null;
-  let previousAd = false;
-  let skipStatus = "Waiting for player";
-  let note = "Monitoring Spotify controls.";
 
-  function readText(selectors) {
+  function firstVisible(selectors) {
     for (const selector of selectors) {
-      const node = document.querySelector(selector);
-      const value = node?.textContent?.trim();
+      const nodes = document.querySelectorAll(selector);
 
-      if (value) return value;
+      for (const node of nodes) {
+        if (isVisible(node)) return node;
+      }
     }
 
-    return "";
+    return null;
   }
 
   function isVisible(node) {
@@ -45,36 +49,55 @@
       getComputedStyle(node).visibility !== "hidden";
   }
 
-  function getVisibleAd() {
-    return [...document.querySelectorAll(SELECTORS.ad)]
-      .some(node => {
-        const text = node.textContent?.trim() || "";
-
-        return isVisible(node) &&
-          /^advertisement\b/i.test(text);
-      });
+  function readText(selectors) {
+    return firstVisible(selectors)?.textContent?.trim() || "";
   }
 
-  function getButtonState(selector) {
-    const button = document.querySelector(selector);
-
+  function getButtonLabel(selectors) {
+    const button = firstVisible(selectors);
     if (!button) return "Not found";
-    if (!isVisible(button)) return "Hidden";
 
-    return button.disabled ||
-      button.getAttribute("aria-disabled") === "true"
-      ? "Disabled"
-      : "Enabled";
+    const label = [
+      button.getAttribute("aria-label"),
+      button.getAttribute("title"),
+      button.getAttribute("aria-disabled")
+    ].filter(Boolean).join(" ");
+
+    return label || "Found";
   }
 
   function getPlaybackState() {
-    const button = document.querySelector(SELECTORS.playPause);
-    const label = button?.getAttribute("aria-label") || "";
+    const video = document.querySelector("video");
 
-    if (/pause/i.test(label)) return "Playing";
-    if (/play/i.test(label)) return "Paused";
+    if (!video) return "No video element found";
+    if (video.ended) return "Ended";
+    if (video.paused) return "Paused";
 
-    return "Unknown";
+    return "Playing";
+  }
+
+  function getAdState() {
+    const adSelectors = [
+      ".ytp-ad-player-overlay",
+      ".ytp-ad-text",
+      ".ytp-ad-skip-button",
+      ".ytp-ad-skip-button-modern",
+      "ytmusic-player-bar .ad-badge"
+    ];
+
+    for (const selector of adSelectors) {
+      for (const node of document.querySelectorAll(selector)) {
+        if (isVisible(node)) {
+          return "Possible ad indicator detected";
+        }
+      }
+    }
+
+    const video = document.querySelector("video");
+
+    if (!video) return "Unknown — player not detected";
+
+    return "No known ad indicator detected";
   }
 
   function ensurePanel() {
@@ -86,15 +109,14 @@
     panel.setAttribute("role", "status");
 
     const fields = [
-      ["sah-heading", "Spotify Ad Helper"],
-      ["sah-status", "Checking player…"],
-      ["sah-meta", ""],
-      ["sah-playback", ""],
-      ["sah-ad-status", ""],
-      ["sah-controls", ""],
-      ["sah-skip-status", ""],
-      ["sah-note", ""],
-      ["sah-updated", ""]
+      ["mah-heading", "Music Ad Helper"],
+      ["mah-status", ""],
+      ["mah-meta", ""],
+      ["mah-playback", ""],
+      ["mah-ad", ""],
+      ["mah-controls", ""],
+      ["mah-note", ""],
+      ["mah-updated", ""]
     ];
 
     for (const [className, value] of fields) {
@@ -104,102 +126,49 @@
       panel.appendChild(element);
     }
 
-    (document.body || document.documentElement)
-      .appendChild(panel);
-
+    (document.body || document.documentElement).appendChild(panel);
     return panel;
   }
 
   function updatePanel(data) {
     const panel = ensurePanel();
 
-    panel.querySelector(".sah-status").textContent =
-      data.title
-        ? "Player metadata detected"
-        : "Waiting for metadata";
-
-    panel.querySelector(".sah-meta").textContent =
-      [data.title, data.artist].filter(Boolean).join(" — ") ||
-      "Track details unavailable";
-
-    panel.querySelector(".sah-playback").textContent =
+    panel.querySelector(".mah-status").textContent = data.status;
+    panel.querySelector(".mah-meta").textContent = data.meta;
+    panel.querySelector(".mah-playback").textContent =
       `Playback: ${data.playback}`;
-
-    panel.querySelector(".sah-ad-status").textContent =
-      `Ad status: ${data.adStatus}`;
-
-    panel.querySelector(".sah-controls").textContent =
-      `Controls — Play/Pause: ${data.playPauseState} | ` +
-      `Next: ${data.nextState} | Volume: ${data.volumeState}`;
-
-    panel.querySelector(".sah-skip-status").textContent =
-      `Skip status: ${data.skipStatus}`;
-
-    panel.querySelector(".sah-note").textContent = data.note;
-
-    panel.querySelector(".sah-updated").textContent =
-      `Last checked: ${data.observedAt}`;
+    panel.querySelector(".mah-ad").textContent =
+      `Ad detection: ${data.ad}`;
+    panel.querySelector(".mah-controls").textContent =
+      `Play/Pause: ${data.playPause} | Next: ${data.next}`;
+    panel.querySelector(".mah-note").textContent = data.note;
+    panel.querySelector(".mah-updated").textContent =
+      `Last checked: ${data.updated}`;
   }
 
   function checkPlayer() {
     if (!document.body) return;
 
-    const adDetected = getVisibleAd();
     const title = readText(SELECTORS.title);
     const artist = readText(SELECTORS.artist);
-
-    const playPauseState =
-      getButtonState(SELECTORS.playPause);
-
-    const nextState =
-      getButtonState(SELECTORS.next);
-
-    const volumeState =
-      getButtonState(SELECTORS.volume);
-
-    const playback = getPlaybackState();
-
-    if (adDetected) {
-      skipStatus = nextState === "Disabled"
-        ? "Skip unavailable"
-        : nextState === "Enabled"
-          ? "Skip not attempted"
-          : "Skip control not available";
-
-      note = nextState === "Disabled"
-        ? "Spotify has disabled Next. No click was attempted."
-        : "Monitoring the ad and playback state. No automatic clicks.";
-
-    } else if (previousAd) {
-      skipStatus = "Ad label disappeared";
-      note = "The visible ad label disappeared; this alone does not prove a skip.";
-
-    } else {
-      skipStatus = "No ad detected";
-      note = "No visible advertisement label was found.";
-    }
-
-    previousAd = adDetected;
+    const video = document.querySelector(SELECTORS.video);
+    const ad = getAdState();
 
     updatePanel({
-      title,
-      artist,
-      playback,
-      adStatus: adDetected
-        ? "Possible advertisement (text match)"
-        : "No visible ad label",
-      playPauseState,
-      nextState,
-      volumeState,
-      skipStatus,
-      note,
-      observedAt: new Date().toLocaleTimeString()
+      status: video ? "Media element detected" : "Waiting for media element",
+      meta: [title, artist].filter(Boolean).join(" — ") ||
+        "Track details unavailable",
+      playback: getPlaybackState(),
+      ad,
+      playPause: getButtonLabel(SELECTORS.playPause),
+      next: getButtonLabel(SELECTORS.next),
+      note: "Diagnostics only. No buttons clicked and no ads skipped.",
+      updated: new Date().toLocaleTimeString()
     });
   }
 
   function start() {
     if (timer) clearInterval(timer);
-
     checkPlayer();
     timer = setInterval(checkPlayer, CHECK_INTERVAL);
   }
