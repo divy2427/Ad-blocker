@@ -1,8 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Music Ad Helper",
-  "version": "0.3.0",
-  "description": "Experiment with YouTube Music playback and ad detection.",
+  "version": "1.0.0",
+  "description": "Detect YouTube Music ads and click available Skip controls.",
+  "permissions": [],
+  "host_permissions": [
+    "https://music.youtube.com/*"
+  ],
   "content_scripts": [
     {
       "matches": [
