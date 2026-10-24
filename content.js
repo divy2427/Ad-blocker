@@ -77,28 +77,43 @@
   }
 
   function getAdState() {
-    const adSelectors = [
-      ".ytp-ad-player-overlay",
-      ".ytp-ad-text",
-      ".ytp-ad-skip-button",
-      ".ytp-ad-skip-button-modern",
-      "ytmusic-player-bar .ad-badge"
-    ];
+  const visible = (selector) =>
+    [...document.querySelectorAll(selector)].filter((node) => {
+      const rect = node.getBoundingClientRect();
+      return rect.width > 0 &&
+        rect.height > 0 &&
+        getComputedStyle(node).visibility !== "hidden";
+    });
 
-    for (const selector of adSelectors) {
-      for (const node of document.querySelectorAll(selector)) {
-        if (isVisible(node)) {
-          return "Possible ad indicator detected";
-        }
-      }
-    }
+  const adOverlays = visible(
+    ".ytp-ad-player-overlay, .ytp-ad-text"
+  );
 
-    const video = document.querySelector("video");
+  const skipButtons = visible(
+    ".ytp-ad-skip-button, .ytp-ad-skip-button-modern"
+  );
 
-    if (!video) return "Unknown — player not detected";
+  const adText = adOverlays
+    .map((node) => node.innerText?.trim())
+    .filter(Boolean);
 
-    return "No known ad indicator detected";
+  const hasAd = adOverlays.length > 0;
+
+  const skipAvailable = skipButtons.some((button) =>
+    !button.disabled &&
+    button.getAttribute("aria-disabled") !== "true"
+  );
+
+  if (hasAd && skipAvailable) {
+    return `Ad detected — skip control enabled. ${adText.join(" | ")}`;
   }
+
+  if (hasAd) {
+    return `Ad detected — skip unavailable. ${adText.join(" | ")}`;
+  }
+
+  return "No known ad indicator detected";
+}
 
   function ensurePanel() {
     let panel = document.getElementById(PANEL_ID);
