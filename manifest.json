@@ -1,28 +1,27 @@
 {
   "manifest_version": 3,
-  "name": "Music Ad Helper",
-  "version": "1.0.0",
-  "description": "Detect YouTube Music ads and click available Skip controls.",
-  "permissions": [],
+  "name": "YouTube Adaptive Ad Controller",
+  "version": "2.2.0",
+  "description": "Experimental reliability build with broader media detection and persistent playback-rate checks.",
+  "permissions": ["storage"],
   "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://youtube.com/*",
     "https://music.youtube.com/*"
   ],
   "content_scripts": [
     {
       "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*",
         "https://music.youtube.com/*"
       ],
-      "js": [
-        "content.js"
-      ],
-      "css": [
-        "styles.css"
-      ],
+      "js": ["content.js"],
       "run_at": "document_idle"
     }
   ],
   "action": {
-    "default_title": "Music Ad Helper",
+    "default_title": "YouTube Adaptive Ad Controller",
     "default_popup": "popup.html"
   }
 }
