@@ -1,51 +1,228 @@
 (() => {
-  if (window.__musicAdHelperSafe) return;
-  window.__musicAdHelperSafe = true;
+  "use strict";
+  const DEFAULTS = {
+    enabled: true,
+    adaptiveSpeed: true,
+    autoMute: true,
+    autoSkip: true,
+    targetSeconds: 0.15,
+    maxSpeed: 64,
+  };
+  let settings = { ...DEFAULTS },
+    adWasActive = false,
+    timer = null,
+    observer = null,
+    poller = null;
+  const saved = new WeakMap();
+  let lastSkip = 0,
+    lastRateAttempt = 0;
 
-  const PANEL_ID = "music-ad-helper-panel";
-  let timer;
+  const AD_MARKERS = [
+    ".ytp-ad-player-overlay",
+    ".ytp-ad-text",
+    ".ytp-ad-preview-container",
+    ".ytp-ad-skip-button",
+    ".ytp-ad-skip-button-modern",
+    ".ytp-ad-overlay-container",
+  ];
+  const SKIP_SELECTORS = [
+    ".ytp-ad-skip-button:not([disabled])",
+    ".ytp-ad-skip-button-modern:not([disabled])",
+    ".ytp-ad-skip-button-container button:not([disabled])",
+    "button[aria-label*='Skip ad' i]:not([disabled])",
+    "button[aria-label*='Skip ads' i]:not([disabled])",
+    "button[title*='Skip ad' i]:not([disabled])",
+    "[role='button'][aria-label*='Skip ad' i]:not([aria-disabled='true'])",
+    "[role='button'][title*='Skip ad' i]:not([aria-disabled='true'])",
+  ];
 
   function visible(el) {
     if (!el) return false;
-    const r = el.getBoundingClientRect();
-    return r.width > 0 && r.height > 0;
-  }
-
-  function check() {
-    if (!document.body) return;
-
-    let panel = document.getElementById(PANEL_ID);
-
-    if (!panel) {
-      panel = document.createElement("div");
-      panel.id = PANEL_ID;
-      panel.style.cssText =
-        "position:fixed;top:90px;right:15px;z-index:999999;" +
-        "background:#171717;color:white;padding:12px;" +
-        "border:1px solid #555;border-radius:8px;" +
-        "font:13px Arial;max-width:280px;pointer-events:none;";
-      document.body.appendChild(panel);
-    }
-
-    const video = document.querySelector("video");
-    const ad = !!document.querySelector(
-      ".ytp-ad-player-overlay, .ytp-ad-text"
+    const s = getComputedStyle(el),
+      r = el.getBoundingClientRect();
+    return (
+      s.display !== "none" &&
+      s.visibility !== "hidden" &&
+      Number(s.opacity) !== 0 &&
+      r.width > 0 &&
+      r.height > 0
     );
-
-    panel.textContent =
-      "Music Ad Helper — Safe Mode\n" +
-      "Playback: " +
-      (!video ? "No video" : video.paused ? "Paused" : "Playing") +
-      "\nAd indicator: " + (ad ? "Detected" : "Not detected") +
-      "\nAutomatic actions: Off";
   }
-
-  check();
-  timer = setInterval(check, 2000);
-
-  window.__musicAdHelperSafeStop = () => {
-    clearInterval(timer);
-    document.getElementById(PANEL_ID)?.remove();
-    delete window.__musicAdHelperSafe;
-  };
+  function playerRoots() {
+    return [
+      ...new Set(
+        [
+          document.querySelector("#movie_player"),
+          document.querySelector(".html5-video-player"),
+          document.querySelector("ytmusic-player"),
+          document.querySelector("ytmusic-player-page"),
+        ].filter(Boolean)
+      ),
+    ];
+  }
+  function isAd() {
+    // YouTube's explicit player state is the strongest signal.
+    for (const root of playerRoots()) {
+      const cls =
+        typeof root.className === "string"
+          ? root.className
+          : root.getAttribute("class") || "";
+      if (
+        /\bad-showing\b|\bad-interrupting\b/i.test(cls) ||
+        root.matches(".ad-showing,.ad-interrupting")
+      )
+        return true;
+    }
+    // Fall back to visible ad-specific UI; do not treat the generic .video-ads container alone as proof.
+    for (const sel of AD_MARKERS) {
+      for (const el of document.querySelectorAll(sel))
+        if (visible(el)) return true;
+    }
+    return false;
+  }
+  function mediaItems() {
+    // YouTube Music may place the active media element outside a queried player root.
+    return [...document.querySelectorAll("video,audio")];
+  }
+  function save(m) {
+    if (!saved.has(m))
+      saved.set(m, {
+        rate: m.playbackRate || 1,
+        muted: !!m.muted,
+        volume: Number.isFinite(m.volume) ? m.volume : 1,
+      });
+  }
+  function speed(m) {
+    if (!settings.adaptiveSpeed || !m.isConnected) return;
+    save(m);
+    const remaining =
+      Number.isFinite(m.duration) &&
+      m.duration > 0 &&
+      Number.isFinite(m.currentTime)
+        ? Math.max(0.1, m.duration - m.currentTime)
+        : null;
+    const target = Math.max(
+      0.15,
+      Math.min(1.5, Number(settings.targetSeconds) || 0.15)
+    );
+    const cap = Math.max(1, Math.min(64, Number(settings.maxSpeed) || 16));
+    const desired =
+      remaining === null
+        ? Math.min(cap, 16)
+        : Math.max(1, Math.min(cap, remaining / target));
+    // Avoid repeated writes when the browser has accepted the rate; retry if the player resets it.
+    if (Math.abs((m.playbackRate || 1) - desired) < 0.05) return;
+    try {
+      m.playbackRate = desired;
+      lastRateAttempt = Date.now();
+    } catch (_) {}
+  }
+  function mute(m) {
+    if (!settings.autoMute) return;
+    save(m);
+    try {
+      m.muted = true;
+    } catch (_) {}
+  }
+  function skip() {
+    if (!settings.autoSkip || Date.now() - lastSkip < 500) return;
+    for (const sel of SKIP_SELECTORS) {
+      for (const button of document.querySelectorAll(sel)) {
+        if (
+          !visible(button) ||
+          button.disabled ||
+          button.getAttribute("aria-disabled") === "true"
+        )
+          continue;
+        // Only click an actual visible skip control; never attempt to bypass an unskippable ad.
+        lastSkip = Date.now();
+        try {
+          button.click();
+        } catch (_) {}
+        return;
+      }
+    }
+  }
+  function restore() {
+    for (const m of mediaItems()) {
+      const prior = saved.get(m);
+      if (!prior) continue;
+      try {
+        m.playbackRate = prior.rate;
+      } catch (_) {}
+      try {
+        m.muted = prior.muted;
+      } catch (_) {}
+      try {
+        m.volume = prior.volume;
+      } catch (_) {}
+      saved.delete(m);
+    }
+  }
+  function scan() {
+    if (!settings.enabled) {
+      if (adWasActive) restore();
+      adWasActive = false;
+      return;
+    }
+    const active = isAd();
+    if (active) {
+      for (const media of mediaItems()) {
+        speed(media);
+        mute(media);
+      }
+      skip();
+    } else if (adWasActive) {
+      restore();
+    }
+    adWasActive = active;
+  }
+  function schedule() {
+    if (timer !== null) return;
+    timer = setTimeout(() => {
+      timer = null;
+      scan();
+    }, 120);
+  }
+  function apply(next) {
+    settings = { ...DEFAULTS, ...next };
+    if (!settings.enabled) {
+      restore();
+      adWasActive = false;
+    }
+    schedule();
+  }
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "sync" && area !== "local") return;
+    const next = {};
+    for (const key of Object.keys(DEFAULTS))
+      if (changes[key]) next[key] = changes[key].newValue;
+    apply(next);
+  });
+  chrome.storage.sync.get(DEFAULTS, (stored) => {
+    apply(stored);
+    observer = new MutationObserver(schedule);
+    observer.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["class", "aria-label", "title", "disabled", "style"],
+    });
+    for (const eventName of [
+      "play",
+      "playing",
+      "loadedmetadata",
+      "timeupdate",
+      "durationchange",
+      "ratechange",
+      "emptied",
+    ]) {
+      document.addEventListener(eventName, schedule, true);
+    }
+    // Some player builds overwrite playbackRate after it is set; periodically re-check during an ad.
+    poller = setInterval(() => {
+      if (settings.enabled && (adWasActive || isAd())) scan();
+    }, 350);
+    schedule();
+  });
 })();
