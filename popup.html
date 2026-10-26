@@ -1,42 +1,43 @@
-<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Music Ad Helper</title>
-  <style>
-    body {
-      width: 280px;
-      padding: 16px;
-      margin: 0;
-      background: #171717;
-      color: #f5f5f5;
-      font: 14px/1.5 Arial, sans-serif;
-    }
-    h2 {
-      margin: 0 0 10px;
-      color: #ff7777;
-      font-size: 18px;
-    }
-    p { margin: 8px 0; }
-    .hint {
-      padding: 10px;
-      border-radius: 8px;
-      background: #292929;
-    }
-    a { color: #8ab4f8; }
-  </style>
-</head>
-<body>
-  <h2>Music Ad Helper</h2>
-  <p>Designed for YouTube Music.</p>
-  <div class="hint">
-    Keep YouTube Music open to use the on-page diagnostic panel.
-    Available Skip controls may be clicked automatically.
-  </div>
-  <p>Skipping is not guaranteed for every ad.</p>
-  <p><a href="https://music.youtube.com/" target="_blank">
-    Open YouTube Music
-  </a></p>
-</body>
-</html>
+const DEFAULTS = {
+  enabled: true,
+  adaptiveSpeed: true,
+  autoMute: true,
+  autoSkip: true,
+  targetSeconds: 0.15,
+  maxSpeed: 128,
+};
+const ids = [
+  "enabled",
+  "adaptiveSpeed",
+  "autoMute",
+  "autoSkip",
+  "targetSeconds",
+  "maxSpeed",
+];
+const status = document.getElementById("status");
+function values() {
+  return {
+    enabled: document.getElementById("enabled").checked,
+    adaptiveSpeed: document.getElementById("adaptiveSpeed").checked,
+    autoMute: document.getElementById("autoMute").checked,
+    autoSkip: document.getElementById("autoSkip").checked,
+    targetSeconds: Number(document.getElementById("targetSeconds").value),
+    maxSpeed: Number(document.getElementById("maxSpeed").value),
+  };
+}
+function save() {
+  chrome.storage.sync.set(values(), () => {
+    status.textContent = chrome.runtime.lastError
+      ? "Could not save settings"
+      : "Settings saved";
+    setTimeout(() => (status.textContent = ""), 1400);
+  });
+}
+chrome.storage.sync.get(DEFAULTS, (s) => {
+  for (const id of ["enabled", "adaptiveSpeed", "autoMute", "autoSkip"])
+    document.getElementById(id).checked = s[id];
+  document.getElementById("targetSeconds").value = String(s.targetSeconds);
+  document.getElementById("maxSpeed").value = String(s.maxSpeed);
+});
+for (const id of ids)
+  document.getElementById(id).addEventListener("change", save);
