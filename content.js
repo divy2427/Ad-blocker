@@ -115,14 +115,17 @@
     timer = setTimeout(() => { timer = null; scan(); }, 120);
   }
   function apply(next) {
-    settings = {...DEFAULTS, ...next};
+    // Keep unchanged preferences when storage reports only the keys that changed.
+    settings = {...settings, ...next};
     if (!settings.enabled) { restore(); adWasActive = false; }
     schedule();
   }
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "sync" && area !== "local") return;
     const next = {};
-    for (const key of Object.keys(DEFAULTS)) if (changes[key]) next[key] = changes[key].newValue;
+    for (const key of Object.keys(DEFAULTS)) {
+      if (changes[key]) next[key] = changes[key].newValue === undefined ? DEFAULTS[key] : changes[key].newValue;
+    }
     apply(next);
   });
   chrome.storage.sync.get(DEFAULTS, stored => {
