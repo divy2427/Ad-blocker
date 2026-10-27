@@ -1,43 +1,12 @@
-const DEFAULTS = {
-  enabled: true,
-  adaptiveSpeed: true,
-  autoMute: true,
-  autoSkip: true,
-  targetSeconds: 0.15,
-  maxSpeed: 128,
-};
-const ids = [
-  "enabled",
-  "adaptiveSpeed",
-  "autoMute",
-  "autoSkip",
-  "targetSeconds",
-  "maxSpeed",
-];
-const status = document.getElementById("status");
-function values() {
-  return {
-    enabled: document.getElementById("enabled").checked,
-    adaptiveSpeed: document.getElementById("adaptiveSpeed").checked,
-    autoMute: document.getElementById("autoMute").checked,
-    autoSkip: document.getElementById("autoSkip").checked,
-    targetSeconds: Number(document.getElementById("targetSeconds").value),
-    maxSpeed: Number(document.getElementById("maxSpeed").value),
-  };
-}
-function save() {
-  chrome.storage.sync.set(values(), () => {
-    status.textContent = chrome.runtime.lastError
-      ? "Could not save settings"
-      : "Settings saved";
-    setTimeout(() => (status.textContent = ""), 1400);
-  });
-}
-chrome.storage.sync.get(DEFAULTS, (s) => {
-  for (const id of ["enabled", "adaptiveSpeed", "autoMute", "autoSkip"])
-    document.getElementById(id).checked = s[id];
-  document.getElementById("targetSeconds").value = String(s.targetSeconds);
-  document.getElementById("maxSpeed").value = String(s.maxSpeed);
-});
-for (const id of ids)
-  document.getElementById(id).addEventListener("change", save);
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>YouTube Adaptive Ad Controller</title>
+<style>body{font:14px/1.45 system-ui,sans-serif;width:292px;margin:0;padding:16px;color:#202124}h1{font-size:16px;margin:0 0 12px}.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:14px 0}label{cursor:pointer}select{padding:5px;max-width:130px}.note{color:#5f6368;font-size:12px;margin-top:14px}#status{min-height:18px;color:#137333;font-size:12px}</style></head>
+<body><h1>YouTube Adaptive Ad Controller</h1>
+<div class="row"><label for="enabled">Enable extension</label><input id="enabled" type="checkbox"></div>
+<div class="row"><label for="adaptiveSpeed">Adaptive ad speed</label><input id="adaptiveSpeed" type="checkbox"></div>
+<div class="row"><label for="autoMute">Mute ads automatically</label><input id="autoMute" type="checkbox"></div>
+<div class="row"><label for="autoSkip">Click skip when available</label><input id="autoSkip" type="checkbox"></div>
+<div class="row"><label for="targetSeconds">Target ad time</label><select id="targetSeconds"><option value="0.15">0.15 seconds</option><option value="0.25">0.25 seconds</option><option value="0.5">0.5 seconds</option><option value="1">1 second</option><option value="1.5">1.5 seconds</option></select></div>
+<div class="row"><label for="maxSpeed">Maximum speed</label><select id="maxSpeed"><option value="16">16×</option><option value="32">32×</option><option value="64">64×</option><option value="128">128× (attempt)</option><option value="256">256× (attempt)</option></select></div>
+<div id="status" role="status"></div>
+<p class="note">For YouTube and YouTube Music webpages. Speed changes and ad detection are best-effort; the target time is not guaranteed.</p><script src="popup.js"></script></body></html>
