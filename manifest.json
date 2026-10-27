@@ -1,9 +1,11 @@
 {
   "manifest_version": 3,
   "name": "YouTube Adaptive Ad Controller",
-  "version": "2.2.0",
-  "description": "Experimental reliability build with broader media detection and persistent playback-rate checks.",
-  "permissions": ["storage"],
+  "version": "2.2.4",
+  "description": "Adds visible skip-button retries and experimental adaptive ad playback speed up to 256\u00d7.",
+  "permissions": [
+    "storage"
+  ],
   "host_permissions": [
     "https://www.youtube.com/*",
     "https://youtube.com/*",
@@ -16,7 +18,9 @@
         "https://youtube.com/*",
         "https://music.youtube.com/*"
       ],
-      "js": ["content.js"],
+      "js": [
+        "content.js"
+      ],
       "run_at": "document_idle"
     }
   ],
