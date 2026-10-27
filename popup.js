@@ -1,0 +1,7 @@
+const DEFAULTS={enabled:true,adaptiveSpeed:true,autoMute:true,autoSkip:true,targetSeconds:0.15,maxSpeed:256};
+const ids=["enabled","adaptiveSpeed","autoMute","autoSkip","targetSeconds","maxSpeed"];
+const status=document.getElementById("status");
+function values(){return {enabled:document.getElementById("enabled").checked,adaptiveSpeed:document.getElementById("adaptiveSpeed").checked,autoMute:document.getElementById("autoMute").checked,autoSkip:document.getElementById("autoSkip").checked,targetSeconds:Number(document.getElementById("targetSeconds").value),maxSpeed:Number(document.getElementById("maxSpeed").value)}}
+function save(){chrome.storage.sync.set(values(),()=>{status.textContent=chrome.runtime.lastError?"Could not save settings":"Settings saved";setTimeout(()=>status.textContent="",1400)})}
+chrome.storage.sync.get(DEFAULTS,s=>{for(const id of ["enabled","adaptiveSpeed","autoMute","autoSkip"])document.getElementById(id).checked=s[id];document.getElementById("targetSeconds").value=String(s.targetSeconds);document.getElementById("maxSpeed").value=String(s.maxSpeed)});
+for(const id of ids)document.getElementById(id).addEventListener("change",save);
